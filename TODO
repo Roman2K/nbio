@@ -1,0 +1,9 @@
+error_array => prom.reject
+
+non-blocking TCPSocket.new
+
+io_loop.fs. 
+  http://nodejs.org/api/fs.html
+
+ReadStream#close ?
+  http://nodejs.org/api/stream.html#stream_event_close
