@@ -9,8 +9,9 @@ NBIO::Loop.run do |io_loop|
   sock.write_nonblock \
     "GET #{path} HTTP/1.0\r\n" \
     "Host: #{host}\r\n\r\n"
-  io_loop.read(sock).ev.
+  io_loop.stream_r(sock).ev.
     on(:err) { |err| p err: err }.
     on(:data) { |chunk| p chunk: chunk.bytesize }.
+    on(:end) { sock.close }.
     on(:end) { p :end }
 end
