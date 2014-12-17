@@ -14,15 +14,16 @@ module NBIO
       until @reads.empty? && @writes.empty?
         rs = @reads.keys.tap { |a| a << @wakeup_r unless a.empty? }
         ws = @writes.keys
-        handle_closes { IO.select(rs, ws) }.
-          zip([@reads, @writes]) do |ios, promises|
-            ios.each do |io|
-              next io.read_nonblock(io.stat.size) if io == @wakeup_r
-              prom = promises.delete(io) \
-                or raise "IO.select returned an unhandled IO"
-              prom.resolve(io)
-            end
+        handle_closes {
+          IO.select(rs, ws)
+        }.zip([@reads, @writes]) { |ios, promises|
+          ios.each do |io|
+            next io.read_nonblock(io.stat.size) if io == @wakeup_r
+            prom = promises.delete(io) \
+              or raise "IO.select returned an unhandled IO"
+            prom.resolve(io)
           end
+        }
       end
     end
 
