@@ -119,9 +119,21 @@ module NBIO
       attr_reader :ev
 
       def write(data)
+        raise "write after end" if @ended
         @buffer << data
         write_next
         @buffer.empty?
+      end
+
+      def end(data=nil)
+        write(data) if data
+        @ended = true
+        if @buffer.empty?
+          @ev.emit(:finish)
+        else
+          @ev.once(:drain) { @ev.emit(:finish) }
+        end
+        nil
       end
 
     private
@@ -184,6 +196,53 @@ module NBIO
         self
       end
     end
+
+    class Enum
+      def initialize(enum)
+        @enum = enum
+        @ev = EventEmitter.new
+        @paused = true
+        @data_emitter = Fiber.new do
+          @enum.each do |data|
+            @ev.emit(:data, data)
+            Fiber.yield if @paused
+          end
+          @ev.emit(:end)
+        end
+      end
+
+      attr_reader :ev
+
+      def pause
+        @paused = true
+        self
+      end
+
+      def resume
+        if @paused
+          @paused = false
+          @data_emitter.resume
+        end
+        self
+      end
+
+      def |(w)
+        @ev.on(:data) { |data|
+          p :writing
+          if !w.write(data)
+            p :pause
+            pause
+            w.ev.once(:drain) { p :resume_drain; resume }
+          end
+        }.on(:end) {
+          p :ended
+          w.end
+        }
+        p :resume_init
+        resume
+      end
+      alias pipe |
+    end
   end
 
   class Acceptor
@@ -214,19 +273,61 @@ module NBIO
 
   class EventEmitter
     def initialize
-      @callbacks = {}
+      @on = {}
+      @once = {}
     end
 
     def on(event, &cb)
       cb or raise ArgumentError, "cb missing"
-      (@callbacks[event] ||= []) << cb
+      add(event, cb, @on)
       self
     end
 
-    def emit(event, *args)
-      cbs = @callbacks[event] or return
-      cbs.each { |cb| cb.call(*args) }
+    def once(event, &cb)
+      cb or raise ArgumentError, "cb missing"
+      add(event, cb, @once)
       self
+    end
+
+    def on2(event, &cb)
+      on(event, &cb)
+      Binding.new(self, event, cb)
+    end
+
+    def emit(event, *args)
+      [@on, @once].each do |cbs|
+        all = cbs[event] or next
+        all.each { |cb| cb.call(*args) }
+      end
+      @once.delete(event)
+      self
+    end
+
+    def remove_cb(event, cb)
+      [@on, @once].each do |cbs|
+        all = cbs[event] or next
+        all.delete(cb)
+      end
+      self
+    end
+
+  private
+
+    def add(event, cb, cbs)
+      (cbs[event] ||= []) << cb
+    end
+
+    class Binding
+      def initialize(ev, event, cb)
+        @ev = ev
+        @event = event
+        @cb = cb
+      end
+
+      def remove
+        @ev.remove_cb(@event, @cb)
+        self
+      end
     end
   end
 
