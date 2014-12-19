@@ -23,16 +23,16 @@ end
 
 concurrency.times { accepting.shift }
 
-io_loop = NBIO::Loop.new
+lo = NBIO::Loop.new
 
 concurrency.times do |n|
   sock = TCPSocket.new('localhost', 1234)
-  io_loop.stream_r(sock, maxlen: 20).ev.
+  lo.stream_r(sock, maxlen: 20).ev.
     on(:err) { |err| p n => err }.
     on(:data) { |chunk| p n => chunk.bytesize }.
     on(:end) { sock.close }.
     on(:end) { p n => :end }
 end
 
-io_loop.run
+lo.run
 server_thr.join

@@ -334,8 +334,8 @@ module NBIO
   end
 
   class Acceptor
-    def initialize(io_loop, sock)
-      @io_loop = io_loop
+    def initialize(lo, sock)
+      @lo = lo
       @sock = sock
       @ev = EventEmitter.new
       accept_next
@@ -348,7 +348,7 @@ module NBIO
     def accept_next
       sock = @sock.accept_nonblock
     rescue IO::WaitReadable
-      @io_loop.monitor_read(@sock).
+      @lo.monitor_read(@sock).
         catch { |err| @ev.emit(:err, err) }.
         then { accept_next }
     rescue SystemCallError
