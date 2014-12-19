@@ -165,17 +165,15 @@ module NBIO
 
       def handle_read_ready
         len = @maxlen || @io.stat.size.tap { |size|
-          return @ev.emit(:end) if size.zero?
+          return handle_eof if size.zero?
         }
         begin
           data = @io.read_nonblock(len)
         rescue IO::WaitReadable
           monitor_next
         rescue EOFError
-          close
-          @ev.emit(:end)
+          handle_eof
         rescue SystemCallError
-          close
           @ev.emit(:err, $!)
         else
           monitor_next
@@ -183,10 +181,13 @@ module NBIO
         end
       end
 
-      def close
-        @io.close_read
-      rescue SystemCallError
-        @ev.emit(:err, $!)
+      def handle_eof
+        begin
+          @io.close_read
+        rescue SystemCallError
+          @ev.emit(:err, $!)
+        end
+        @ev.emit(:end)
       end
     end
 
@@ -226,7 +227,6 @@ module NBIO
             catch { |err| @ev.emit(:err, err) }.
             then { write_next }
         rescue SystemCallError
-          close
           @ev.emit(:err, $!)
         else
           @buffer.trim(written)
@@ -239,14 +239,12 @@ module NBIO
       end
 
       def finish
-        close
+        begin
+          @io.close_write
+        rescue SystemCallError
+          @ev.emit(:err, $!)
+        end
         @ev.emit(:finish)
-      end
-
-      def close
-        @io.close_write
-      rescue SystemCallError
-        @ev.emit(:err, $!)
       end
     end
 
