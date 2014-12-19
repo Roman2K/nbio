@@ -70,6 +70,35 @@ module NBIO
   end
 
   module Streams
+    ##
+    # Any object can act as a source for a pipe (the left hand side of `|`, e.g.
+    # `a` in `a | b`), provided it:
+    #
+    # * emits `:data` and `:end` events via #ev
+    # * responds to #pause (returns self)
+    # * responds to #resume (returns self)
+    #
+    # See Read and Enum.
+    #
+    module PipeSource
+      # Can't use keyword args because `end` is a reserved keyword.
+      def pipe(w, **opts)
+        end_w = opts.delete(:end) { true }
+        opts.empty? \
+          or raise ArgumentError, "unhandled opts: %p" % opts.keys
+        ev.on(:data) { |data|
+          if !w.write(data)
+            pause
+            w.ev.once(:drain) { resume }
+          end
+        }
+        ev.on(:end) { w.end } if end_w
+        resume
+        w
+      end
+      alias | pipe
+    end
+
     class Read
       def initialize(io_loop, io, maxlen)
         @io_loop = io_loop
@@ -81,9 +110,31 @@ module NBIO
 
       attr_reader :ev
 
+      include PipeSource
+
+      def pause
+        @paused = true
+        self
+      end
+
+      def resume
+        if @paused
+          @paused = false
+          if @monitor_next_on_resume
+            @monitor_next_on_resume = false
+            monitor_next
+          end
+        end
+        self
+      end
+
     private
 
       def monitor_next
+        if @paused
+          @monitor_next_on_resume = true
+          return
+        end
         @io_loop.monitor_read(@io).
           catch { |err| @ev.emit(:err, err) }.
           then { handle_read_ready }
@@ -213,6 +264,8 @@ module NBIO
 
       attr_reader :ev
 
+      include PipeSource
+
       def pause
         @paused = true
         self
@@ -225,24 +278,6 @@ module NBIO
         end
         self
       end
-
-      # Can't use keyword args because `end` is a reserved keyword.
-      def pipe(w, **opts)
-        end_w = opts.delete(:end) { true }
-        opts.empty? \
-          or raise ArgumentError, "unhandled opts: %p" % opts.keys
-        @ev.on(:data) { |data|
-          if !w.write(data)
-            pause
-            w.ev.once(:drain) { resume }
-          end
-        }.on(:end) {
-          w.end if end_w
-        }
-        resume
-        w
-      end
-      alias | pipe
     end
   end
 

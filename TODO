@@ -16,3 +16,6 @@ stop
 
 io_loop.stream_r
 io_loop.stream_w
+
+Streams::Write
+  hwm => node/lib/_stream_writable.js
