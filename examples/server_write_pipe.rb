@@ -17,7 +17,7 @@ NBIO::Loop.run do |lo|
   sock = server.accept
   chunks = ['.' * (10 * 1024)] * 1024 + ['.']
   drained = 0
-  NBIO::Streams::Enum.new(chunks) | lo.stream_w(sock).tap { |w|
+  NBIO::Streams::Enum.new(chunks) | lo.wstream(sock).tap { |w|
     w.ev.on(:drain) {
       drained += 1
       p drained: drained if drained % 100 == 0

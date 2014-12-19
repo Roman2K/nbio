@@ -15,7 +15,7 @@ NBIO::Loop.run do |lo|
   client_thr.wakeup
   sock = server.accept
   str = '.' * (1024 * 1024 + 1)
-  w = lo.stream_w(sock)
+  w = lo.wstream(sock)
   p write: w.write(str)
   w.ev.on(:err) { |err|
     p err: err

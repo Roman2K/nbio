@@ -29,15 +29,15 @@ module NBIO
       monitor(io, @writes)
     end
 
-    def stream_r(io, **opts)
+    def rstream(io, **opts)
       Streams::Read.new(self, io, **opts)
     end
 
-    def stream_w(io, **opts)
+    def wstream(io, **opts)
       Streams::Write.new(self, io, **opts)
     end
 
-    def stream_rw(io, **opts)
+    def rwstream(io, **opts)
       Streams::Duplex.new(self, io, **opts)
     end
 

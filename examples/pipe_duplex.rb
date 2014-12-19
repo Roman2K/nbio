@@ -7,7 +7,7 @@ client_thr = Thread.new do
     Thread.stop
     transform = TCPSocket.new('localhost', 1234)
     input = NBIO::Streams::Enum.new(["Transform me!\n"])
-    input | lo.stream_rw(transform) | lo.stream_w($stdout)
+    input | lo.rwstream(transform) | lo.wstream($stdout)
   end
 end
 
