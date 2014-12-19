@@ -9,13 +9,10 @@ non-blocking
 io_loop.fs. 
   http://nodejs.org/api/fs.html
 
-io_loop.stream_w(io, maxlen)
-
 stop
   examples/server_accept.rb
 
-io_loop.stream_r
-io_loop.stream_w
-
 Streams::Write
   hwm => node/lib/_stream_writable.js
+
+close event (?)

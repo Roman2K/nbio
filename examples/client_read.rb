@@ -27,7 +27,7 @@ io_loop = NBIO::Loop.new
 
 concurrency.times do |n|
   sock = TCPSocket.new('localhost', 1234)
-  io_loop.stream_r(sock, 20).ev.
+  io_loop.stream_r(sock, maxlen: 20).ev.
     on(:err) { |err| p n => err }.
     on(:data) { |chunk| p n => chunk.bytesize }.
     on(:end) { sock.close }.

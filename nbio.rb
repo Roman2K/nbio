@@ -35,12 +35,16 @@ module NBIO
       monitor(io, @writes)
     end
 
-    def stream_r(io, maxlen=nil)
-      Streams::Read.new(self, io, maxlen)
+    def stream_r(io, **opts)
+      Streams::Read.new(self, io, **opts)
     end
 
-    def stream_w(io)
-      Streams::Write.new(self, io)
+    def stream_w(io, **opts)
+      Streams::Write.new(self, io, **opts)
+    end
+    
+    def stream_rw(io, **opts)
+      Streams::Duplex.new(self, io, **opts)
     end
 
     def accept(sock)
@@ -70,6 +74,24 @@ module NBIO
   end
 
   module Streams
+    class BasicStream
+      def initialize(lo, io, **opts)
+        @lo = lo
+        @io = io
+        @ev = EventEmitter.new
+        process_opts! opts
+        opts.empty? \
+          or raise ArgumentError, "unhandled opts: %p" % opts.keys
+      end
+
+      attr_reader :ev
+
+    protected
+
+      def process_opts!(opts)
+      end
+    end
+
     ##
     # Any object can act as a source for a pipe (the left hand side of `|`, e.g.
     # `a` in `a | b`), provided it:
@@ -86,12 +108,12 @@ module NBIO
         end_w = opts.delete(:end) { true }
         opts.empty? \
           or raise ArgumentError, "unhandled opts: %p" % opts.keys
-        ev.on(:data) { |data|
+        ev.on(:data) do |data|
           if !w.write(data)
             pause
             w.ev.once(:drain) { resume }
           end
-        }
+        end
         ev.on(:end) { w.end } if end_w
         resume
         w
@@ -99,16 +121,11 @@ module NBIO
       alias | pipe
     end
 
-    class Read
-      def initialize(io_loop, io, maxlen)
-        @io_loop = io_loop
-        @io = io
-        @maxlen = maxlen
-        @ev = EventEmitter.new
+    module Readable
+      def initialize(*args)
+        super
         monitor_next
       end
-
-      attr_reader :ev
 
       include PipeSource
 
@@ -128,6 +145,12 @@ module NBIO
         self
       end
 
+    protected
+
+      def process_opts!(opts)
+        @maxlen = opts.delete(:maxlen)
+      end
+
     private
 
       def monitor_next
@@ -135,7 +158,7 @@ module NBIO
           @monitor_next_on_resume = true
           return
         end
-        @io_loop.monitor_read(@io).
+        @lo.monitor_read(@io).
           catch { |err| @ev.emit(:err, err) }.
           then { handle_read_ready }
       end
@@ -149,25 +172,29 @@ module NBIO
         rescue IO::WaitReadable
           monitor_next
         rescue EOFError
+          close
           @ev.emit(:end)
         rescue SystemCallError
+          close
           @ev.emit(:err, $!)
         else
           monitor_next
           @ev.emit(:data, data)
         end
       end
+
+      def close
+        @io.close_read
+      rescue SystemCallError
+        @ev.emit(:err, $!)
+      end
     end
 
-    class Write
-      def initialize(io_loop, io)
-        @io_loop = io_loop
-        @io = io
+    module Writable
+      def initialize(*args)
+        super
         @buffer = Buffer.new
-        @ev = EventEmitter.new
       end
-
-      attr_reader :ev
 
       def write(data)
         raise "write after end" if @ended
@@ -180,9 +207,9 @@ module NBIO
         write(data) if data
         @ended = true
         if @buffer.empty?
-          @ev.emit(:finish)
+          finish
         else
-          @ev.once(:drain) { @ev.emit(:finish) }
+          @ev.once(:drain) { finish }
         end
         nil
       end
@@ -195,9 +222,12 @@ module NBIO
         begin
           written = @io.write_nonblock(str)
         rescue IO::WaitWritable
-          @io_loop.monitor_write(@io).
+          @lo.monitor_write(@io).
             catch { |err| @ev.emit(:err, err) }.
             then { write_next }
+        rescue SystemCallError
+          close
+          @ev.emit(:err, $!)
         else
           @buffer.trim(written)
           if @buffer.empty?
@@ -206,6 +236,17 @@ module NBIO
             write_next
           end
         end
+      end
+
+      def finish
+        close
+        @ev.emit(:finish)
+      end
+
+      def close
+        @io.close_write
+      rescue SystemCallError
+        @ev.emit(:err, $!)
       end
     end
 
@@ -246,6 +287,19 @@ module NBIO
         end
         self
       end
+    end
+
+    class Read < BasicStream
+      include Readable
+    end
+
+    class Write < BasicStream
+      include Writable
+    end
+
+    class Duplex < BasicStream
+      include Readable
+      include Writable
     end
 
     class Enum
@@ -325,22 +379,9 @@ module NBIO
       self
     end
 
-    def on2(event, &cb)
-      on(event, &cb)
-      Binding.new(self, event, cb)
-    end
-
     def emit(event, *args)
       [*@on[event], *@once.delete(event)].each do |cb|
         cb.call(*args)
-      end
-      self
-    end
-
-    def remove_cb(event, cb)
-      [@on, @once].each do |cbs|
-        all = cbs[event] or next
-        all.delete(cb)
       end
       self
     end
@@ -349,19 +390,6 @@ module NBIO
 
     def add(event, cb, cbs)
       (cbs[event] ||= []) << cb
-    end
-
-    class Binding
-      def initialize(ev, event, cb)
-        @ev = ev
-        @event = event
-        @cb = cb
-      end
-
-      def remove
-        @ev.remove_cb(@event, @cb)
-        self
-      end
     end
   end
 
