@@ -226,22 +226,23 @@ module NBIO
         self
       end
 
-      def |(w)
+      # Can't use keyword args because `end` is a reserved keyword.
+      def pipe(w, **opts)
+        end_w = opts.delete(:end) { true }
+        opts.empty? \
+          or raise ArgumentError, "unhandled opts: %p" % opts.keys
         @ev.on(:data) { |data|
-          p :writing
           if !w.write(data)
-            p :pause
             pause
-            w.ev.once(:drain) { p :resume_drain; resume }
+            w.ev.once(:drain) { resume }
           end
         }.on(:end) {
-          p :ended
-          w.end
+          w.end if end_w
         }
-        p :resume_init
         resume
+        w
       end
-      alias pipe |
+      alias | pipe
     end
   end
 
@@ -295,11 +296,9 @@ module NBIO
     end
 
     def emit(event, *args)
-      [@on, @once].each do |cbs|
-        all = cbs[event] or next
-        all.each { |cb| cb.call(*args) }
+      [*@on[event], *@once.delete(event)].each do |cb|
+        cb.call(*args)
       end
-      @once.delete(event)
       self
     end
 

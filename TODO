@@ -1,6 +1,10 @@
+refactor @reads, @writes, prom_maps
+
 error_array => prom.reject
 
-non-blocking TCPSocket.new
+non-blocking
+  TCPSocket.new
+  close
 
 io_loop.fs. 
   http://nodejs.org/api/fs.html
