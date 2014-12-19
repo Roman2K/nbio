@@ -2,7 +2,7 @@ require 'nbio'
 require 'socket'
 
 client_thr = Thread.new do
-  Thread.abort_on_exception = true
+  Thread.current.abort_on_exception = true
   NBIO::Loop.run do |lo|
     Thread.stop
     transform = TCPSocket.new('localhost', 1234)

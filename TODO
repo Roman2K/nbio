@@ -16,3 +16,5 @@ Streams::Write
   hwm => node/lib/_stream_writable.js
 
 close event (?)
+
+don't close STDIN / STDOUT / STDERR like Node.js (?)
