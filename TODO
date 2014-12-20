@@ -1,5 +1,7 @@
 error_array => prom.reject
 
+abstract select() / EventMachine / libev / other
+
 non-blocking
   TCPSocket.new
   close
@@ -16,3 +18,5 @@ Streams::Write
 close event (?)
 
 don't close STDIN / STDOUT / STDERR like Node.js (?)
+
+README: mention https://practicingruby.com/articles/event-loops-demystified
