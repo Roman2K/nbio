@@ -5,25 +5,19 @@ module NBIO
     end
 
     def initialize
-      @reads = {}
-      @writes = {}
-      @wakeup_r, @wakeup_w = IO.pipe
+      @monitored = [
+        @reads = {},
+        @writes = {},
+      ]
+      @wakeup_pipe = WakeupPipe.new
     end
 
     def run
-      until @reads.empty? && @writes.empty?
-        rs = @reads.keys.tap { |a| a << @wakeup_r unless a.empty? }
-        ws = @writes.keys
-        handle_closes {
-          IO.select(rs, ws)
-        }.zip([@reads, @writes]) { |ios, promises|
-          ios.each do |io|
-            next io.read_nonblock(io.stat.size) if io == @wakeup_r
-            prom = promises.delete(io) \
-              or raise "IO.select returned an unhandled IO"
-            prom.resolve(io)
-          end
-        }
+      until @monitored.all?(&:empty?)
+        arrays = @monitored.map(&:values).tap { |reads,| reads << @wakeup_pipe }
+        handle_closes { IO.select(*arrays) }.
+          flatten.
+          each(&:handle_actionable)
       end
     end
 
@@ -53,22 +47,59 @@ module NBIO
 
   private
 
-    def monitor(io, promises)
-      promises[io] ||= Promise.new.tap do
-        @wakeup_w.write "\n"
-      end
+    def monitor(io, registry)
+      (registry[io] ||= MonitoredIO.new(io, registry).tap {
+        @wakeup_pipe.wake_up
+      }).promise
     end
 
     def handle_closes
-      prom_maps = [@reads, @writes]
-      begin
-        yield
-      rescue IOError
-        prom_maps.each do |promises|
-          promises.delete_if { |io,| io.closed? }
-        end
-        return [], [], [] if prom_maps.all?(&:empty?)
-        retry
+      yield
+    rescue IOError
+      @monitored.each do |mios|
+        mios.delete_if { |io,| io.closed? }
+      end
+      return [], [], [] if @monitored.all?(&:empty?)
+      retry
+    end
+
+    class WakeupPipe
+      def initialize
+        @r, @w = IO.pipe
+      end
+
+      def to_io
+        @r
+      end
+
+      def handle_actionable
+        @r.read_nonblock(@r.stat.size)
+        nil
+      end
+
+      def wake_up
+        @w.write("\n")
+        self
+      end
+    end
+
+    class MonitoredIO
+      def initialize(io, registry)
+        @io = io
+        @registry = registry
+        @promise = Promise.new
+      end
+
+      attr_reader :promise
+
+      def to_io
+        @io
+      end
+
+      def handle_actionable
+        @registry.delete(@io)
+        @promise.resolve(@io)
+        nil
       end
     end
   end

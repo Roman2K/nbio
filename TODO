@@ -1,5 +1,3 @@
-refactor @reads, @writes, prom_maps
-
 error_array => prom.reject
 
 non-blocking
