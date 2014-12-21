@@ -9,13 +9,12 @@ module NBIO
         @reads = {},
         @writes = {},
       ]
-      @wakeup_pipe = WakeupPipe.new
     end
 
     def run
       until @monitored.all?(&:empty?)
-        arrays = @monitored.map(&:values).tap { |reads,| reads << @wakeup_pipe }
-        handle_closes { IO.select(*arrays) }.
+        io_arrays = @monitored.map(&:values)
+        handle_closes { IO.select(*io_arrays) }.
           flatten.
           each(&:handle_actionable)
       end
@@ -48,9 +47,7 @@ module NBIO
   private
 
     def monitor(io, registry)
-      (registry[io] ||= MonitoredIO.new(io, registry).tap {
-        @wakeup_pipe.wake_up
-      }).promise
+      (registry[io] ||= MonitoredIO.new(io, registry)).promise
     end
 
     def handle_closes
@@ -61,26 +58,6 @@ module NBIO
       end
       return [], [], [] if @monitored.all?(&:empty?)
       retry
-    end
-
-    class WakeupPipe
-      def initialize
-        @r, @w = IO.pipe
-      end
-
-      def to_io
-        @r
-      end
-
-      def handle_actionable
-        @r.read_nonblock(@r.stat.size)
-        nil
-      end
-
-      def wake_up
-        @w.write("\n")
-        self
-      end
     end
 
     class MonitoredIO
