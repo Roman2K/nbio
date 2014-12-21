@@ -1,5 +1,9 @@
 module NBIO
   class Loop
+    # Same as Node.js:
+    # http://nodejs.org/api/process.html#process_process_maxtickdepth
+    MAX_TICK_DEPTH = 1000
+
     def self.run
       new.tap { |lo| yield lo }.run
     end
@@ -10,15 +14,24 @@ module NBIO
         @writes = {},
       ]
       @wakeup_pipe = WakeupPipe.new
+      @on_next_tick = []
     end
 
     def run
-      until @monitored.all?(&:empty?)
+      loop do
+        @on_next_tick.slice!(0, MAX_TICK_DEPTH).each(&:call)
+        break if @monitored.all?(&:empty?)
         arrays = @monitored.map(&:values).tap { |reads,| reads << @wakeup_pipe }
         handle_closes { IO.select(*arrays) }.
           flatten.
           each(&:handle_actionable)
       end
+    end
+
+    def next_tick(&cb)
+      cb or raise ArgumentError, "cb missing"
+      @on_next_tick << cb
+      self
     end
 
     def monitor_read(io)
