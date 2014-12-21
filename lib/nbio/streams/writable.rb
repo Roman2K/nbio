@@ -8,7 +8,7 @@ module NBIO
     def write(data)
       raise "write after end" if @ended
       @buffer << data
-      write_next
+      monitor_next
       @buffer.empty?
     end
 
@@ -25,15 +25,17 @@ module NBIO
 
   private
 
-    def write_next
+    def monitor_next
+      @lo.monitor_write(@io).
+        catch { |err| @ev.emit(:err, err) }.
+        then { handle_write_ready }
+    end
+
+    def handle_write_ready
       str = @buffer.to_s
       return @buffer.clear if str.empty?
       begin
         written = @io.write_nonblock(str)
-      rescue IO::WaitWritable
-        @lo.monitor_write(@io).
-          catch { |err| @ev.emit(:err, err) }.
-          then { write_next }
       rescue SystemCallError
         @ev.emit(:err, $!)
       else
@@ -41,7 +43,7 @@ module NBIO
         if @buffer.empty?
           @ev.emit(:drain)
         else
-          write_next
+          monitor_next
         end
       end
     end

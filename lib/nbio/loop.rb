@@ -16,7 +16,7 @@ module NBIO
         io_arrays = @monitored.map(&:values)
         handle_closes { IO.select(*io_arrays) }.
           flatten.
-          each(&:handle_actionable)
+          each(&:handle_ready)
       end
     end
 
@@ -73,7 +73,7 @@ module NBIO
         @io
       end
 
-      def handle_actionable
+      def handle_ready
         @registry.delete(@io)
         @promise.resolve(@io)
         nil

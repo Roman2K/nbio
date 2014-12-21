@@ -48,8 +48,6 @@ module NBIO
         }
         begin
           data = @io.read_nonblock(len)
-        rescue IO::WaitReadable
-          monitor_next
         rescue EOFError
           handle_eof
         rescue SystemCallError
