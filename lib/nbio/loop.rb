@@ -12,11 +12,12 @@ module NBIO
     end
 
     def run
-      until @monitored.all?(&:empty?)
-        io_arrays = @monitored.map(&:values)
-        handle_closes { IO.select(*io_arrays) }.
-          flatten.
-          each(&:handle_ready)
+      loop do
+        handle_closes {
+          io_arrays = @monitored.map(&:values)
+          return if io_arrays.all?(&:empty?)
+          IO.select(*io_arrays)
+        }.flatten.each(&:handle_ready)
       end
     end
 
@@ -56,7 +57,6 @@ module NBIO
       @monitored.each do |mios|
         mios.delete_if { |io,| io.closed? }
       end
-      return [], [], [] if @monitored.all?(&:empty?)
       retry
     end
 
@@ -70,7 +70,7 @@ module NBIO
       attr_reader :promise
 
       def to_io
-        @io
+        @io.to_io
       end
 
       def handle_ready

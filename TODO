@@ -1,8 +1,14 @@
 error_array => prom.reject
 
+module NBIO::Streams vs module NBIO; module Streams
+
 abstract select() / EventMachine / libev / other
 
+SSL
+  test renegociation (IO::Wait{Writable,Readable})
+
 non-blocking
+  connect (SSLSocket)
   TCPSocket.new
   close
 

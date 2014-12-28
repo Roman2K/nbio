@@ -32,9 +32,7 @@ NBIO::Loop.run do |lo|
   2.times { accepting.shift }
   src = TCPSocket.open('localhost', 1234)
   dest = TCPSocket.open('localhost', 1235)
-  lo.rstream(src) | lo.wstream(dest).tap { |w|
-    w.ev.on(:finish) { [src, dest].each(&:close) }
-  }
+  lo.rstream(src) | lo.wstream(dest)
 end
 
 src_thr.join

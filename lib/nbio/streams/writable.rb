@@ -2,13 +2,14 @@ module NBIO
   module Streams::Writable
     def initialize(*args)
       super
+      @want << :write
       @buffer = Buffer.new
     end
 
     def write(data)
       raise "write after end" if @ended
       @buffer << data
-      monitor_next
+      monitor_writability
       @buffer.empty?
     end
 
@@ -25,8 +26,8 @@ module NBIO
 
   private
 
-    def monitor_next
-      @lo.monitor_write(@io).
+    def monitor_writability(ev=:write)
+      @lo.public_send("monitor_#{ev}", @io).
         catch { |err| @ev.emit(:err, err) }.
         then { handle_write_ready }
     end
@@ -36,6 +37,8 @@ module NBIO
       return @buffer.clear if str.empty?
       begin
         written = @io.write_nonblock(str)
+      rescue IO::WaitReadable
+        monitor_writability(:read)
       rescue SystemCallError
         @ev.emit(:err, $!)
       else
@@ -43,17 +46,13 @@ module NBIO
         if @buffer.empty?
           @ev.emit(:drain)
         else
-          monitor_next
+          monitor_writability
         end
       end
     end
 
     def finish
-      begin
-        @io.close_write
-      rescue SystemCallError
-        @ev.emit(:err, $!)
-      end
+      may_close(:write)
       @ev.emit(:finish)
     end
 

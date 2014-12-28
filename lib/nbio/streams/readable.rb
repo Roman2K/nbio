@@ -3,7 +3,8 @@ module NBIO
     module Readable
       def initialize(*args)
         super
-        monitor_next
+        @want << :read
+        monitor_readability
       end
 
       include PipeSource
@@ -16,9 +17,9 @@ module NBIO
       def resume
         if @paused
           @paused = false
-          if @monitor_next_on_resume
-            @monitor_next_on_resume = false
-            monitor_next
+          if @monitor_readability_on_resume
+            @monitor_readability_on_resume = false
+            monitor_readability
           end
         end
         self
@@ -32,38 +33,36 @@ module NBIO
 
     private
 
-      def monitor_next
+      def monitor_readability(ev=:read)
         if @paused
-          @monitor_next_on_resume = true
+          @monitor_readability_on_resume = true
           return
         end
-        @lo.monitor_read(@io).
+        @lo.public_send("monitor_#{ev}", @io).
           catch { |err| @ev.emit(:err, err) }.
           then { handle_read_ready }
       end
 
       def handle_read_ready
-        len = @maxlen || @io.stat.size.tap { |size|
+        len = @maxlen || @io.to_io.stat.size.tap { |size|
           return handle_eof if size.zero?
         }
         begin
           data = @io.read_nonblock(len)
+        rescue IO::WaitWritable
+          monitor_readability(:write)
         rescue EOFError
           handle_eof
         rescue SystemCallError
           @ev.emit(:err, $!)
         else
-          monitor_next
           @ev.emit(:data, data)
+          monitor_readability
         end
       end
 
       def handle_eof
-        begin
-          @io.close_read
-        rescue SystemCallError
-          @ev.emit(:err, $!)
-        end
+        may_close(:read)
         @ev.emit(:end)
       end
     end

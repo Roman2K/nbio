@@ -30,7 +30,6 @@ concurrency.times do |n|
   lo.rstream(sock, maxlen: 20).ev.
     on(:err) { |err| p n => err }.
     on(:data) { |chunk| p n => chunk.bytesize }.
-    on(:end) { sock.close }.
     on(:end) { p n => :end }
 end
 

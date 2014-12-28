@@ -2,7 +2,6 @@
 
 find examples -mindepth 1 \
   -not -name pipe_cat.rb \
-  -not -name server_accept_manual.rb \
   | while read f; do
     echo -e "\n$(tput smul)$f$(tput rmul)"
     ruby -Ilib "$f" || exit 1

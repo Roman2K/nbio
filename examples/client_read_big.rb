@@ -12,6 +12,5 @@ NBIO::Loop.run do |lo|
   lo.rstream(sock).ev.
     on(:err) { |err| p err: err }.
     on(:data) { |chunk| p chunk: chunk.bytesize }.
-    on(:end) { sock.close }.
     on(:end) { p :end }
 end

@@ -22,7 +22,6 @@ NBIO::Loop.run do |lo|
       drained += 1
       p drained: drained if drained % 100 == 0
     }.on(:finish) {
-      sock.close
       server.close
       p :finish
     }
